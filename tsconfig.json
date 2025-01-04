@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": false,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2021",
+    "sourceMap": false,
+    "outDir": "./dist", // The output directory for the compiled files
+    "baseUrl": "./",
+    "rootDir": "./src", // Ensure the rootDir points to the src directory
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noLib": false,
+    "allowJs": false,
+    "lib": ["es2017"],
+    "moduleResolution": "node"
+  },
+  "include": ["src/**/*.ts"], // Include all TypeScript files inside src
+  "exclude": ["node_modules"] // Exclude node_modules from compilation
+}
