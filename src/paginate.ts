@@ -1,9 +1,6 @@
 import { Model, Document } from "mongoose";
 import { PaginationDto } from "./dto/pagination.dto";
-import {
-  IPaginatedResult,
-  IPaginationLinks,
-} from "./interfaces/pagination.interface";
+import { IPaginatedResult, IPaginationLinks } from "./interfaces/pagination.interface";
 
 /**
  * Utility function to paginate data using Mongoose's find or aggregate methods.
@@ -14,7 +11,7 @@ import {
  * @param {any} [queryOrPipeline] - Optional query object for find or aggregation pipeline.
  * @param {string} [link] - The endpoint to which the data retrieved from.
  * @param {boolean} [isAggregate=false] - Whether to use aggregate pipeline.
- * @returns {Promise<PaginatedResult<T>>} A promise that resolves to a paginated result object.
+ * @returns {Promise<IPaginatedResult<T>>} A promise that resolves to a paginated result object.
  */
 export async function paginate<T extends Document>(
   paginationDto: PaginationDto,
@@ -75,9 +72,9 @@ export async function paginate<T extends Document>(
  * Generate pagination navigation links.
  *
  * @param {string} link - The endpoint to which the data retrieved from.
- * @param {IPaginationDto} paginationDto - DTO containing pagination parameters (page, limit, etc.).
+ * @param {PaginationDto} paginationDto - DTO containing pagination parameters (page, limit, etc.).
  * @param {number} totalItems - Total number of items across all pages.
- * @returns {PaginationLinks} An object containing navigation links.
+ * @returns {IPaginationLinks} An object containing navigation links.
  */
 function getPaginationLinks(
   link: string,
