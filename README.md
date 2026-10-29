@@ -1,6 +1,6 @@
 # nestjs-mongoose-pagination
 
-A lightweight, customizable, and developer-friendly pagination module for NestJS and Mongoose. This package provides a reusable utility for handling paginated responses with support for metadata and navigation links.
+A lightweight, customizable, and developer-friendly pagination module for NestJS and Mongoose. This package provides reusable utilities for handling paginated responses with metadata.
 
 [![npm version](https://img.shields.io/npm/v/nestjs-mongoose-pagination.svg)](https://www.npmjs.com/package/nestjs-mongoose-pagination)
 
@@ -25,9 +25,9 @@ yarn add nestjs-mongoose-pagination
 ## Features
 
 - Easy integration with Mongoose and NestJS
-- Customizable DTO for pagination
-- Metadata for pagination (total items, current page, etc.)
-- Navigation links (first, previous, next, last)
+- Customizable DTO for pagination (page, limit, sort, order, search)
+- Metadata for pagination (total items, total pages, current page, etc.)
+- Supports Mongoose `find` queries and aggregation pipelines
 - Inspired by [nestjs-typeorm-paginate](https://www.npmjs.com/package/nestjs-typeorm-paginate)
 
 ---
@@ -47,29 +47,25 @@ import { CategoryService } from "./category.service";
 export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
-  /**
-   * Retrieve all categories
-   * @param paginationDto - pagination related data
-   */
   @Get()
   findAll(@Query() paginationDto: PaginationDto) {
-    return this.categoryService.findAll(filteredPaginationData);
+    return this.categoryService.findAll(paginationDto);
   }
 }
 ```
 
-#### Service with Find Option
+#### Service with Find (Query)
 
 ```typescript
 import {
-  IPaginatedResult,
-  paginate,
+  IPaginateResult,
+  mongoosePaginate,
   PaginationDto,
 } from "nestjs-mongoose-pagination";
 import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
-import { Category, CategoryDocument } from "./schema/user.schema";
+import { Category, CategoryDocument } from "./schema/category.schema";
 
 @Injectable()
 export class CategoryService {
@@ -77,38 +73,35 @@ export class CategoryService {
     @InjectModel(Category.name) private categoryModel: Model<CategoryDocument>,
   ) {}
 
-  /**
-   * Retrieve all categories
-   * @param paginationDto - pagination related data
-   */
   async findAll(
     paginationDto: PaginationDto,
-  ): Promise<IPaginatedResult<CategoryEntity>> {
+  ): Promise<IPaginateResult<CategoryDocument>> {
     // Generate database query
-    const query = {}; // Find all (No filter)
+    const filter = {}; // Find all (No filter)
 
-    return paginate<CategoryDocument>(
+    return mongoosePaginate<CategoryDocument>(
       paginationDto,
       this.categoryModel,
-      query,
-      process.env.SERVER_LINK + "/category", // Optional
+      filter,
+      { name: 1, createdAt: 1 }, // Optional projection
+      { createdAt: -1 }, // Optional sort
     );
   }
 }
 ```
 
-#### Service without Aggregate Option
+#### Service with Aggregation
 
 ```typescript
 import {
-  IPaginatedResult,
-  paginate,
+  IPaginateResult,
+  mongooseAggregatePaginate,
   PaginationDto,
 } from "nestjs-mongoose-pagination";
 import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
-import { Category, CategoryDocument } from "./schema/user.schema";
+import { Category, CategoryDocument } from "./schema/category.schema";
 
 @Injectable()
 export class CategoryService {
@@ -116,25 +109,19 @@ export class CategoryService {
     @InjectModel(Category.name) private categoryModel: Model<CategoryDocument>,
   ) {}
 
-  /**
-   * Retrieve all categories
-   * @param paginationDto - pagination related data
-   */
   async findAll(
     paginationDto: PaginationDto,
-  ): Promise<IPaginatedResult<CategoryEntity>> {
+  ): Promise<IPaginateResult<CategoryDocument>> {
     // Mongoose aggregation pipeline
     const pipeline = [
       { $match: { status: "active" } },
       { $sort: { createdAt: -1 } },
     ];
 
-    return paginate<CategoryDocument>(
+    return mongooseAggregatePaginate<CategoryDocument>(
       paginationDto,
       this.categoryModel,
       pipeline,
-      process.env.SERVER_LINK + "/category", // Optional
-      true, // Indicates usage of aggregation
     );
   }
 }
@@ -153,49 +140,61 @@ export class CategoryService {
 | `page`   | number | `1`     | The current page number.                  |
 | `limit`  | number | `10`    | The number of items per page.             |
 | `skip`   | number |         | The number of items to skip (calculated). |
+| `sort`   | string |         | Field to sort by.                         |
+| `order`  | string |         | Sort order direction (`ASC` or `DESC`).   |
+| `search` | string |         | Search term to filter results.            |
 
 ---
 
 ## API Reference
 
-### `paginate` Function
+### `mongoosePaginate` Function
 
-The `paginate` function handles pagination for Mongoose models.
+Paginates data using Mongoose's `find` query.
 
 #### Parameters
 
-| Parameter         | Type            | Description                                               |
-| ----------------- | --------------- | --------------------------------------------------------- |
-| `paginationDto`   | `PaginationDto` | DTO containing pagination parameters (page, limit, etc.). |
-| `model`           | `Model<T>`      | The Mongoose model.                                      |
-| `queryOrPipeline` | `any`           | Optional Mongoose query or aggregation pipeline.          |
-| `link`            | `string`        | The endpoint for generating navigation links.             |
-| `isAggregate`     | `boolean`       | Whether to use an aggregation pipeline.                   |
+| Parameter      | Type                       | Description                                               |
+| -------------- | -------------------------- | --------------------------------------------------------- |
+| `paginationDto` | `PaginationDto`           | DTO containing pagination parameters (page, limit, etc.). |
+| `model`         | `Model<T>`                | The Mongoose model.                                      |
+| `filter`        | `QueryFilter<T>`          | Optional query filter used to match documents.            |
+| `projection`    | `ProjectionType<T>`       | Optional fields to include or exclude from the result.     |
+| `sort`          | `Record<string, SortOrder>` | Optional sorting configuration.                          |
 
 #### Returns
 
-A promise resolving to a `IPaginatedResult` object containing paginated data, metadata, and navigation links.
+A promise resolving to a `IPaginateResult` object containing paginated data and metadata.
+
+### `mongooseAggregatePaginate` Function
+
+Paginates data using a Mongoose aggregation pipeline.
+
+#### Parameters
+
+| Parameter       | Type              | Description                                               |
+| --------------- | ----------------- | --------------------------------------------------------- |
+| `paginationDto` | `PaginationDto`   | DTO containing pagination parameters (page, limit, etc.). |
+| `model`         | `Model<any>`      | The Mongoose model.                                      |
+| `pipeline`      | `PipelineStage[]` | Aggregation pipeline stages.                             |
+
+#### Returns
+
+A promise resolving to a `IPaginateResult` object containing paginated data and metadata.
 
 ---
 
-## Example Metadata
+## Example Result
 
 ```json
 {
-  "items": [ ... ],
-  "meta": {
-    "totalItems": 100,
-    "itemCount": 10,
-    "itemsPerPage": 10,
-    "totalPages": 10,
+  "data": [ ... ],
+  "pagination": {
+    "totalPage": 10,
+    "totalCount": 100,
     "currentPage": 1,
-    "firstItem": 1
-  },
-  "links": {
-    "first": "https://example.com/categories?page=1&limit=10",
-    "previous": "",
-    "next": "https://example.com/categories?page=2&limit=10",
-    "last": "https://example.com/categories?page=10&limit=10"
+    "limit": 10,
+    "hasMore": true
   }
 }
 ```

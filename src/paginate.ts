@@ -1,100 +1,93 @@
-import { Model, Document } from "mongoose";
-import { PaginationDto } from "./dto/pagination.dto";
-import { IPaginatedResult, IPaginationLinks } from "./interfaces/pagination.interface";
+import { Model, PipelineStage, ProjectionType, QueryFilter, SortOrder } from 'mongoose';
+import { PaginationDto } from './dto/pagination.dto';
+import { IPaginateResult } from './interfaces/pagination.interface';
 
 /**
- * Utility function to paginate data using Mongoose's find or aggregate methods.
+ * Utility function to paginate data using Mongoose's find query.
  *
  * @template T - The type of the documents being paginated.
  * @param {PaginationDto} paginationDto - DTO containing pagination parameters (page, limit, and skip).
  * @param {Model<T>} model - The Mongoose model for the collection.
- * @param {any} [queryOrPipeline] - Optional query object for find or aggregation pipeline.
- * @param {string} [link] - The endpoint to which the data retrieved from.
- * @param {boolean} [isAggregate=false] - Whether to use aggregate pipeline.
- * @returns {Promise<IPaginatedResult<T>>} A promise that resolves to a paginated result object.
+ * @param {QueryFilter<T>} [filter={}] - Query filter used to match documents.
+ * @param {ProjectionType<T>} [projection] - Fields to include or exclude from the result.
+ * @param {Record<string, SortOrder>} [sort] - Sorting configuration.
+ * @returns {Promise<IPaginateResult<T>>} A promise that resolves to a paginated result object.
  */
-export async function paginate<T extends Document>(
-  paginationDto: PaginationDto,
-  model: Model<T>,
-  queryOrPipeline?: any,
-  link?: string,
-  isAggregate: boolean = false,
-): Promise<IPaginatedResult<T>> {
-  const { page, limit } = paginationDto;
-  const skip = paginationDto.skip || (page - 1) * limit;
+export async function mongoosePaginate<T>(
+	paginationDto: PaginationDto,
+	model: Model<T>,
+	filter: QueryFilter<T> = {},
+	projection?: ProjectionType<T>,
+	sort?: Record<string, SortOrder>,
+): Promise<IPaginateResult<T>> {
+	// Count all matching documents
+	const totalCount = await model.countDocuments(filter).exec();
 
-  let totalItems: number;
-  let items: T[];
+	// Fetch paginated documents
+	const items = await model
+		.find(filter, projection)
+		.sort(sort ?? {})
+		.skip(paginationDto.skip)
+		.limit(paginationDto.limit)
+		.lean()
+		.exec();
 
-  if (isAggregate) {
-    // Handle aggregate queries
-    const countPipeline = [...queryOrPipeline, { $count: "total" }];
-    const countResult = await model.aggregate(countPipeline).exec();
-    totalItems = countResult.length > 0 ? countResult[0].total : 0;
+	// Calculate total number of pages
+	const totalPage = Math.ceil(totalCount / paginationDto.limit);
 
-    const paginationPipeline = [
-      ...queryOrPipeline,
-      {
-        $project: {
-          password: 0,
-        },
-      },
-      { $skip: skip },
-      { $limit: limit },
-    ];
-    items = await model.aggregate(paginationPipeline).exec();
-  } else {
-    // Handle normal find queries
-    totalItems = await model.countDocuments(queryOrPipeline).exec();
-    items = await model
-      .find(queryOrPipeline, { password: 0 })
-      .skip(skip)
-      .limit(limit)
-      .exec();
-  }
-
-  // Return paginated result with metadata and links
-  return {
-    items,
-    meta: {
-      totalItems,
-      itemCount: items.length,
-      itemsPerPage: limit,
-      totalPages: Math.ceil(totalItems / limit),
-      currentPage: page,
-      firstItem: skip + 1,
-    },
-    links: getPaginationLinks(link, paginationDto, totalItems),
-  };
+	// Return paginated result with metadata
+	return {
+		data: items as T[],
+		pagination: {
+			totalPage,
+			totalCount,
+			currentPage: paginationDto.page,
+			limit: paginationDto.limit,
+			hasMore: paginationDto.page < totalPage,
+		},
+	};
 }
 
 /**
- * Generate pagination navigation links.
+ * Utility function to paginate data using a Mongoose aggregation pipeline.
  *
- * @param {string} link - The endpoint to which the data retrieved from.
- * @param {PaginationDto} paginationDto - DTO containing pagination parameters (page, limit, etc.).
- * @param {number} totalItems - Total number of items across all pages.
- * @returns {IPaginationLinks} An object containing navigation links.
+ * This is useful for complex queries involving lookups, grouping,
+ * projections, calculated fields, and other aggregation operations.
+ *
+ * @template T - The type of the aggregation result being paginated.
+ * @param {PaginationDto} paginationDto - DTO containing pagination parameters (page, limit, and skip).
+ * @param {Model<any>} model - The Mongoose model for the collection.
+ * @param {PipelineStage[]} pipeline - Aggregation pipeline stages.
+ * @returns {Promise<IPaginateResult<T>>} A promise that resolves to a paginated result object.
  */
-function getPaginationLinks(
-  link: string,
-  paginationDto: PaginationDto,
-  totalItems: number,
-): IPaginationLinks {
-  if (!link) return undefined;
+export async function mongooseAggregatePaginate<T>(
+	paginationDto: PaginationDto,
+	model: Model<any>,
+	pipeline: PipelineStage[],
+): Promise<IPaginateResult<T>> {
+	// Create a count pipeline to determine total matching records
+	const countResult = await model.aggregate([...pipeline, { $count: 'total' }]).exec();
 
-  const totalPages = Math.ceil(totalItems / paginationDto.limit);
+	// Extract total count from aggregation result
+	const totalCount = countResult[0]?.total ?? 0;
 
-  return {
-    first: `${link}?page=1&limit=${paginationDto.limit}`,
-    previous:
-      paginationDto.page > 1
-        ? `${link}?page=${paginationDto.page - 1}&limit=${paginationDto.limit}`
-        : "",
-    next:
-      paginationDto.page < totalPages
-        ? `${link}?page=${paginationDto.page + 1}&limit=${paginationDto.limit}`
-        : "",
-    last: `${link}?page=${totalPages}&limit=${paginationDto.limit}`,
-  };
+	// Apply pagination stages to the aggregation pipeline
+	const items = await model
+		.aggregate([...pipeline, { $skip: paginationDto.skip }, { $limit: paginationDto.limit }])
+		.exec();
+
+	// Calculate total number of pages
+	const totalPage = Math.ceil(totalCount / paginationDto.limit);
+
+	// Return paginated result with metadata
+	return {
+		data: items as T[],
+		pagination: {
+			totalPage,
+			totalCount,
+			currentPage: paginationDto.page,
+			limit: paginationDto.limit,
+			hasMore: paginationDto.page < totalPage,
+		},
+	};
 }
