@@ -3,19 +3,27 @@
 	"version": "1.1.0",
 	"description": "A custom pagination solution for Mongoose and NestJS",
 	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"require": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
 	"files": [
-		"src",
+		"dist",
 		"README.md",
 		"LICENSE"
 	],
 	"scripts": {
 		"build": "tsc",
 		"format": "prettier --write \"src/**/*.ts\"",
-		"prepublishOnly": "npm run build"
+		"prepack": "npm run build"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/saeedNW/nestjs-mongoose-pagination.git"
+		"url": "git+https://github.com/snorouzi/nestjs-mongoose-pagination.git"
 	},
 	"author": "Saeed Norouzi",
 	"keywords": [
@@ -26,9 +34,9 @@
 	],
 	"license": "MIT",
 	"bugs": {
-		"url": "https://github.com/saeedNW/nestjs-mongoose-pagination/issues"
+		"url": "https://github.com/snorouzi/nestjs-mongoose-pagination/issues"
 	},
-	"homepage": "https://github.com/saeedNW/nestjs-mongoose-paginationn#readme",
+	"homepage": "https://github.com/snorouzi/nestjs-mongoose-pagination#readme",
 	"dependencies": {
 		"@nestjs/common": "^11.0.1",
 		"@nestjs/core": "^11.0.1",
